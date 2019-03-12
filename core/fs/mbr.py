@@ -6,7 +6,7 @@
 
 
 from struct import pack, unpack_from
-from easy_enum import Enum
+from easy_enum import EEnum as Enum
 
 
 class PartitionType(Enum):
@@ -69,77 +69,86 @@ class PartitionType(Enum):
     LINUX_RAID = (0xFD, 'Linux RAID')
 
 
-class CHS(object):
-    """ MBR ... """
-
-    SIZE = 3
-
-    def __init__(self):
-        self.head = 0
-        self.sector = 0
-        self.cylinder = 0
-
-    def info(self):
-        return "Head: {}, Sector: {}, Cylinder: {}".format(self.head, self.sector, self.cylinder)
-
-    def export(self):
-        return bytes([self.head, (self.sector & 0x3F) | ((self.cylinder >> 2) & 0xC0), self.cylinder & 0xFF])
-
-    @classmethod
-    def parse(cls, data, offset=0):
-        assert len(data) >= offset + cls.SIZE
-        chs = cls()
-        chs.head = data[offset]
-        chs.sector = data[offset+1] & 0x3F
-        chs.cylinder = data[offset+2] | ((data[offset+1] & 0xC0) << 2)
-        return chs
-
-
 class PartitionEntry(object):
     """ MBR Partition Entry """
 
+    FORMAT = '<8BLL'
     SIZE = 16
 
-    def __init__(self, **kwargs):
-        self.status = 0
-        self.chs_start = CHS()
-        self.partition_type = 0
-        self.chs_end = CHS()
+    @property
+    def bootable(self):
+        return True if self._status & 0x80 else False
+
+    @bootable.setter
+    def bootable(self, value):
+        assert isinstance(value, bool)
+        self._status = 0x80 if value else 0x00
+
+    @property
+    def partition_type(self):
+        return self._partition_type
+
+    @partition_type.setter
+    def partition_type(self, value):
+        assert PartitionType.is_valid(value)
+        self._partition_type = value
+
+    def __init__(self, status=0, partition_type=0):
+        self._status = status
+        self._partition_type = partition_type
+        # CHS Start
+        self.start_head = 0
+        self.start_sector = 0
+        self.start_cylinder = 0
+        # CHS End
+        self.end_head = 0
+        self.end_sector = 0
+        self.end_cylinder = 0
+        # partition allocation
         self.lba_start = 0
         self.num_sectors = 0
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
     def info(self):
         nfo = str()
-        nfo += " Status:         0x{:X}\n".format(self.status)
+        nfo += " Bootable:       {}\n".format('YES' if self.bootable else 'NO')
         nfo += " Partition Type: {}\n".format(PartitionType[self.partition_type])
-        nfo += " CHS Start:      {}\n".format(self.chs_start.info())
-        nfo += " CHS End:        {}\n".format(self.chs_end.info())
-        nfo += " LBA Start:      0x{:X}\n".format(self.lba_start)
+        nfo += " CHS Start:      {} Head, {} Sector, {} Cylinder\n".format(self.start_head,
+                                                                           self.start_sector,
+                                                                           self.start_cylinder)
+        nfo += " CHS End:        {} Head, {} Sector, {} Cylinder\n".format(self.end_head,
+                                                                           self.end_sector,
+                                                                           self.end_cylinder)
+        nfo += " LBA Start:      {}\n".format(self.lba_start)
         nfo += " Sectors Count:  {}\n".format(self.num_sectors)
         return nfo
 
     def export(self):
-        data = bytes([self.status])
-        data += self.chs_start.export()
-        data += bytes([self.partition_type])
-        data += self.chs_end.export()
-        data += pack('<LL', self.lba_start, self.num_sectors)
-        return data
+        return pack(self.FORMAT,
+                    self._status,
+                    self.start_head,
+                    (self.start_sector & 0x3F) | ((self.start_cylinder >> 2) & 0xC0),
+                    self.start_cylinder & 0xFF,
+                    self._partition_type,
+                    self.end_head,
+                    (self.end_sector & 0x3F) | ((self.end_cylinder >> 2) & 0xC0),
+                    self.end_cylinder & 0xFF,
+                    self.lba_start,
+                    self.num_sectors)
 
     @classmethod
     def parse(cls, data, offset=0):
-        obj = cls()
-        obj.status = int(data[offset])
-        offset += 1
-        obj.chs_start = CHS.parse(data, offset)
-        offset += CHS.SIZE
-        obj.partition_type = int(data[offset])
-        offset += 1
-        obj.chs_end = CHS.parse(data, offset)
-        offset += CHS.SIZE
-        obj.lba_start, obj.num_sectors = unpack_from('<LL', data, offset)
+        (
+            status, start_head, start_sc, start_cs, partition_type, end_head, end_sc, end_cs, lba_start, num_sectors
+        ) = unpack_from(cls.FORMAT, data, offset)
+        obj = cls(status, partition_type)
+        obj.start_head = start_head
+        obj.start_sector = start_sc & 0x3F
+        obj.start_cylinder = start_cs | ((start_sc & 0xC0) << 2)
+        obj.end_head = end_head
+        obj.end_sector = end_sc & 0x3F
+        obj.end_cylinder = end_cs | ((end_sc & 0xC0) << 2)
+        obj.lba_start = lba_start
+        obj.num_sectors = num_sectors
         return obj
 
 
@@ -184,19 +193,18 @@ class MBR(object):
     def info(self):
         nfo = str()
         for i, partition in enumerate(self._partitions):
-            if partition.partition_type == PartitionType.EMPTY:
-                nfo += " Partition {}: Empty\n".format(i)
-            else:
-                nfo += " Partition {}\n".format(i)
-                nfo += " " + "-" * 50
-                nfo += partition.info()
-                nfo += " " + "-" * 50
+            nfo += " < MBR Partition {} > ".format(i)
+            nfo += "-" * 40 + "\n"
+            nfo += partition.info()
+            nfo += " " + "-" * 60 + "\n\n"
         return nfo
 
     def export(self):
         data = bytes(self.bootstrap)
         for partition in self._partitions:
             data += partition.export()
+        if len(self._partitions) < self.MAX_PARTITIONS:
+            data += bytes([0] * (self.MAX_PARTITIONS - len(self._partitions)))
         data += pack("<H", self.SIGNATURE)
         return data
 
@@ -208,7 +216,9 @@ class MBR(object):
             raise Exception()
         mbr = cls(bytearray(data[offset:offset+cls.BOOTSTRAP_SIZE]))
         offset += cls.BOOTSTRAP_SIZE
-        for i in range(cls.MAX_PARTITIONS):
-            mbr[i] = PartitionEntry.parse(data, offset)
+        for _ in range(cls.MAX_PARTITIONS):
+            pe = PartitionEntry.parse(data, offset)
             offset += PartitionEntry.SIZE
+            if pe.partition_type != PartitionType.EMPTY:
+                mbr.append(pe)
         return mbr

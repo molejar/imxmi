@@ -6,8 +6,12 @@
 
 import uuid
 import binascii
-from struct import pack, unpack_from
-from easy_enum import Enum
+from struct import pack, unpack_from, calcsize
+from easy_enum import EEnum as Enum
+
+
+class GPTError(Exception):
+    pass
 
 
 class PartitionType(Enum):
@@ -76,9 +80,10 @@ class PartitionType(Enum):
 
 
 class Header(object):
-    FORMAT = '<8s4I4Q16sQ3I'
+
     SIGNATURE = b'EFI PART'
-    SIZE = 92
+    FORMAT = '<8s4s3I4Q16sQ3I'
+    SIZE = calcsize(FORMAT)
 
     @property
     def header_crc32(self):
@@ -100,7 +105,7 @@ class Header(object):
         return binascii.crc32(crc32_input)
 
     def __init__(self):
-        self.revision = 0x100
+        self.revision = bytes([0x00, 0x00, 0x01, 0x00])
         self.current_lba = 0
         self.backup_lba = 0
         self.first_usable_lba = 0
@@ -113,14 +118,14 @@ class Header(object):
 
     def info(self):
         nfo = str()
-        nfo += " Revision:         0x{:X}\n".format(self.revision)
-        nfo += " Current LBA:      0x{:X}\n".format(self.current_lba)
-        nfo += " Backup LBA:       0x{:X}\n".format(self.backup_lba)
-        nfo += " First Usable LBA: 0x{:X}\n".format(self.first_usable_lba)
-        nfo += " Last Usable LBA:  0x{:X}\n".format(self.last_usable_lba)
+        nfo += " Revision:         {}.{}\n".format(self.revision[2], self.revision[3])
+        nfo += " Current LBA:      {}\n".format(self.current_lba)
+        nfo += " Backup LBA:       {}\n".format(self.backup_lba)
+        nfo += " First Usable LBA: {}\n".format(self.first_usable_lba)
+        nfo += " Last Usable LBA:  {}\n".format(self.last_usable_lba)
         nfo += " Disk GUID:        {}\n".format(uuid.UUID(int=self.disk_guid))
         nfo += " Entries Count:    {}\n".format(self.number_of_partition_entries)
-        nfo += " Part. Entry LBA:  0x{:X}\n".format(self.last_usable_lba)
+        nfo += " Part. Entry LBA:  {}\n".format(self.last_usable_lba)
         nfo += " Part. Entry Size: {}\n".format(self.size_of_partition_entry)
         nfo += " Part. Entry CRC:  0x{:X}\n".format(self.partition_entry_array_crc32)
         return nfo
@@ -163,20 +168,20 @@ class Header(object):
             obj.size_of_partition_entry,
             obj.partition_entry_array_crc32
         ) = unpack_from(cls.FORMAT, data, offset)
-        if signature != cls.SIGNATURE:
-            raise Exception()
-        if header_size != cls.SIZE:
-            raise Exception()
-        if header_crc32 != obj.header_crc32:
-            raise Exception()
         obj.disk_guid = int.from_bytes(disk_guid, 'little')
+        if signature != cls.SIGNATURE:
+            raise GPTError('Bad signature: %r' % signature)
+        if header_size != cls.SIZE:
+            raise GPTError('Bad header size: %r' % header_size)
+        if header_crc32 != obj.header_crc32:
+            raise GPTError('Bad header CRC32: %r' % header_crc32)
         return obj
 
 
 class PartitionEntry(object):
 
-    SIZE = 128
-    ENDIAN = 'little'
+    FORMAT = '<16s16sQQQ72s'
+    SIZE = calcsize(FORMAT)
 
     def __init__(self):
         self.partition_name = ''
@@ -189,41 +194,40 @@ class PartitionEntry(object):
     def info(self):
         nfo = str()
         nfo += " Part. Name:   {}\n".format(self.partition_name)
-        nfo += " Part. Type:   {}\n".format(PartitionType[self.partition_type])
+        nfo += " Part. Type:   {}\n".format(PartitionType[self.partition_type] if
+                                            PartitionType.is_valid(self.partition_type) else
+                                            uuid.UUID(int=self.partition_type))
         nfo += " Part. GUID:   {}\n".format(uuid.UUID(int=self.partition_guid))
-        nfo += " First LBA:    0x{:X}\n".format(self.first_lba)
-        nfo += " Last  LBA:    0x{:X}\n".format(self.last_lba)
+        nfo += " First LBA:    {}\n".format(self.first_lba)
+        nfo += " Last  LBA:    {}\n".format(self.last_lba)
         nfo += " Attr. Flags:  0x{:X}\n".format(self.attribute_flags)
         return nfo
 
     def export(self):
-        data = bytes()
-        data += self.partition_type.to_bytes(16, self.ENDIAN)
-        data += self.partition_guid.to_bytes(16, self.ENDIAN)
-        data += self.first_lba.to_bytes(8, self.ENDIAN)
-        data += self.last_lba.to_bytes(8, self.ENDIAN)
-        data += self.attribute_flags.to_bytes(8, self.ENDIAN)
-        data += self.partition_name.encode('ascii')
-        if len(data) < self.SIZE:
-            data += bytes([0] * (self.SIZE - len(data)))
-        return data
+        return pack(self.FORMAT,
+                    self.partition_type.to_bytes(16, 'little'),
+                    self.partition_guid.to_bytes(16, 'little'),
+                    self.first_lba,
+                    self.last_lba,
+                    self.attribute_flags,
+                    self.partition_name.encode('utf-16'))
 
     @classmethod
     def parse(cls, data, offset=0):
         if len(data) <= offset + cls.SIZE:
             raise Exception()
         obj = cls()
-        obj.partition_type = int.from_bytes(data[offset:offset + 16], cls.ENDIAN)
-        offset += 16
-        obj.partition_guid = int.from_bytes(data[offset:offset + 16], cls.ENDIAN)
-        offset += 16
-        obj.first_lba = int.from_bytes(data[offset:offset + 8], cls.ENDIAN)
-        offset += 8
-        obj.last_lba = int.from_bytes(data[offset:offset + 8], cls.ENDIAN)
-        offset += 8
-        obj.attribute_flags = int.from_bytes(data[offset:offset + 8], cls.ENDIAN)
-        offset += 8
-        obj.partition_name = data[offset:offset + 72].decode('ascii').strip()
+        (
+            partition_type,
+            partition_guid,
+            obj.first_lba,
+            obj.last_lba,
+            obj.attribute_flags,
+            partition_name
+        ) = unpack_from(cls.FORMAT, data, offset)
+        obj.partition_type = int.from_bytes(partition_type, 'little')
+        obj.partition_guid = int.from_bytes(partition_guid, 'little')
+        obj.partition_name = partition_name.decode('utf-16').strip('\0')
         return obj
 
 
@@ -265,24 +269,31 @@ class GPT(object):
 
     def info(self):
         nfo = str()
+        nfo += " < GPT Header > " + "-" * 45 + "\n"
         nfo += self.header.info()
+        nfo += " " + "-" * 60 + "\n\n"
         for i, partition in enumerate(self._partitions):
-            nfo += " Partition {}\n".format(i)
-            nfo += " " + "-" * 50
-            nfo += partition.info()
-            nfo += " " + "-" * 50
+            if partition.first_lba != 0 and partition.last_lba != 0:
+                nfo += " < GPT Partition {:3d} > ".format(i)
+                nfo += "-" * 38 + "\n"
+                nfo += partition.info()
+                nfo += " " + "-" * 60 + "\n\n"
         return nfo
 
     def export(self):
         # TODO: Update header
         data = self.header.export()
+        data += bytes([0] * (self.sector_size - self.header.SIZE))
         for partition in self._partitions:
             data += partition.export()
         return data
 
     @classmethod
-    def parse(cls, data, offset=0):
+    def parse(cls, data, offset=0, sector_size=512):
         obj = cls(Header.parse(data, offset))
-        offset += Header.SIZE
-        # TODO: Partition Entry Parser
+        for i in range(obj.header.number_of_partition_entries):
+            pentry = PartitionEntry.parse(data, offset + sector_size)
+            offset += PartitionEntry.SIZE
+            if pentry.first_lba != 0 and pentry.last_lba != 0:
+                obj.append(pentry)
         return obj
