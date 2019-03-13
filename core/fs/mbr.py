@@ -5,8 +5,12 @@
 # or at https://spdx.org/licenses/BSD-3-Clause.html#licenseText
 
 
-from struct import pack, unpack_from
+from struct import pack, unpack_from, calcsize
 from easy_enum import EEnum as Enum
+
+
+class MBRError(Exception):
+    pass
 
 
 class PartitionType(Enum):
@@ -73,7 +77,7 @@ class PartitionEntry(object):
     """ MBR Partition Entry """
 
     FORMAT = '<8BLL'
-    SIZE = 16
+    SIZE = calcsize(FORMAT)
 
     @property
     def bootable(self):
@@ -109,6 +113,7 @@ class PartitionEntry(object):
         self.num_sectors = 0
 
     def info(self):
+        """ Return Partition-Entry info """
         nfo = str()
         nfo += " Bootable:       {}\n".format('YES' if self.bootable else 'NO')
         nfo += " Partition Type: {}\n".format(PartitionType[self.partition_type])
@@ -123,6 +128,9 @@ class PartitionEntry(object):
         return nfo
 
     def export(self):
+        """ Export Partition-Entry as bytes array
+        :return type: bytes
+        """
         return pack(self.FORMAT,
                     self._status,
                     self.start_head,
@@ -137,6 +145,11 @@ class PartitionEntry(object):
 
     @classmethod
     def parse(cls, data, offset=0):
+        """ Parse Partition-Entry from bytes array
+        :param data: The bytes array
+        :param offset: The offset in bytes array
+        :return: PartitionEntry object
+        """
         (
             status, start_head, start_sc, start_cs, partition_type, end_head, end_sc, end_cs, lba_start, num_sectors
         ) = unpack_from(cls.FORMAT, data, offset)
@@ -153,23 +166,35 @@ class PartitionEntry(object):
 
 
 class MBR(object):
-    """ Generic Master Boot Record (MBR) """
+    """ The Master Boot Record (MBR) Class """
 
     BOOTSTRAP_SIZE = 446
     MAX_PARTITIONS = 4
     SIGNATURE = 0xAA55
     SIZE = 512
 
+    @property
+    def bootstrap(self):
+        return self._bootstrap
+
+    @bootstrap.setter
+    def bootstrap(self, value):
+        assert isinstance(value, (bytes, bytearray))
+        self._bootstrap = bytearray(value)
+
     def __init__(self, bootstrap=None):
-        assert bootstrap is not None and isinstance(bootstrap, bytearray)
-        self.bootstrap = bytearray(self.BOOTSTRAP_SIZE) if bootstrap is None else bootstrap
-        self._partitions = []
+        self._bootstrap = bytearray(self.BOOTSTRAP_SIZE)
+        self._partitions = {}
+        if bootstrap is not None:
+            self.bootstrap = bootstrap
 
     def __len__(self):
         return len(self._partitions)
 
     def __getitem__(self, key):
-        return self._partitions[key]
+        if key >= self.MAX_PARTITIONS:
+            raise IndexError()
+        return self._partitions.get(key)
 
     def __setitem__(self, key, value):
         assert isinstance(value, PartitionEntry)
@@ -181,18 +206,17 @@ class MBR(object):
         return self._partitions.__iter__()
 
     def clear(self):
+        """ Remove all partitions entry """
         self._partitions.clear()
 
-    def append(self, item):
-        assert isinstance(item, PartitionEntry)
-        self._partitions.append(item)
-
     def dell(self, index):
+        """ Remove selected partition entry """
         return self._partitions.pop(index)
 
     def info(self):
+        """ Return MBR info """
         nfo = str()
-        for i, partition in enumerate(self._partitions):
+        for i, partition in self._partitions.items():
             nfo += " < MBR Partition {} > ".format(i)
             nfo += "-" * 40 + "\n"
             nfo += partition.info()
@@ -200,25 +224,32 @@ class MBR(object):
         return nfo
 
     def export(self):
+        """ Export MBR as bytes array
+        :return type: bytes
+        """
         data = bytes(self.bootstrap)
-        for partition in self._partitions:
-            data += partition.export()
-        if len(self._partitions) < self.MAX_PARTITIONS:
-            data += bytes([0] * (self.MAX_PARTITIONS - len(self._partitions)))
+        for i in range(self.MAX_PARTITIONS):
+            data += bytes([0]*PartitionEntry.SIZE) if self._partitions.get(i) is None else self._partitions[i].export()
         data += pack("<H", self.SIGNATURE)
         return data
 
     @classmethod
     def parse(cls, data, offset=0):
+        """ Parse MBR from bytes array
+        :param data: The bytes array
+        :param offset: The offset in bytes array
+        :return: MBR object
+        """
         if len(data) < (cls.SIZE + offset):
-            raise Exception()
+            raise MBRError()
         if unpack_from("<H", data, offset + (cls.SIZE - 2))[0] != cls.SIGNATURE:
-            raise Exception()
-        mbr = cls(bytearray(data[offset:offset+cls.BOOTSTRAP_SIZE]))
+            raise MBRError()
+
+        mbr = cls(data[offset:offset+cls.BOOTSTRAP_SIZE])
         offset += cls.BOOTSTRAP_SIZE
-        for _ in range(cls.MAX_PARTITIONS):
-            pe = PartitionEntry.parse(data, offset)
+        for i in range(cls.MAX_PARTITIONS):
+            partition = PartitionEntry.parse(data, offset)
             offset += PartitionEntry.SIZE
-            if pe.partition_type != PartitionType.EMPTY:
-                mbr.append(pe)
+            if partition.partition_type != PartitionType.EMPTY:
+                mbr[i] = partition
         return mbr

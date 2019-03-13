@@ -86,7 +86,7 @@ class Header(object):
     SIZE = calcsize(FORMAT)
 
     @property
-    def header_crc32(self):
+    def header_crc(self):
         crc32_input =  pack(self.FORMAT,
                             self.SIGNATURE,
                             self.revision,
@@ -135,7 +135,7 @@ class Header(object):
                     self.SIGNATURE,
                     self.revision,
                     self.SIZE,
-                    self.header_crc32,
+                    self.header_crc,
                     0,  # reserved
                     self.current_lba,
                     self.backup_lba,
@@ -156,7 +156,7 @@ class Header(object):
             signature,
             obj.revision,
             header_size,
-            header_crc32,
+            header_crc,
             _,
             obj.current_lba,
             obj.backup_lba,
@@ -173,8 +173,8 @@ class Header(object):
             raise GPTError('Bad signature: %r' % signature)
         if header_size != cls.SIZE:
             raise GPTError('Bad header size: %r' % header_size)
-        if header_crc32 != obj.header_crc32:
-            raise GPTError('Bad header CRC32: %r' % header_crc32)
+        if header_crc != obj.header_crc:
+            raise GPTError('Bad header crc: %r' % header_crc)
         return obj
 
 
@@ -240,13 +240,15 @@ class GPT(object):
     def __init__(self, header):
         self.header = header
         self.sector_size = 512
-        self._partitions = []
+        self._partitions = {}
 
     def __len__(self):
         return len(self._partitions)
 
     def __getitem__(self, key):
-        return self._partitions[key]
+        if key >= self.MAX_PARTITIONS:
+            raise IndexError()
+        return self._partitions.get(key)
 
     def __setitem__(self, key, value):
         assert isinstance(value, PartitionEntry)
@@ -260,10 +262,6 @@ class GPT(object):
     def clear(self):
         self._partitions.clear()
 
-    def append(self, item):
-        assert isinstance(item, PartitionEntry)
-        self._partitions.append(item)
-
     def dell(self, index):
         return self._partitions.pop(index)
 
@@ -272,7 +270,7 @@ class GPT(object):
         nfo += " < GPT Header > " + "-" * 45 + "\n"
         nfo += self.header.info()
         nfo += " " + "-" * 60 + "\n\n"
-        for i, partition in enumerate(self._partitions):
+        for i, partition in self._partitions.items():
             if partition.first_lba != 0 and partition.last_lba != 0:
                 nfo += " < GPT Partition {:3d} > ".format(i)
                 nfo += "-" * 38 + "\n"
@@ -284,16 +282,16 @@ class GPT(object):
         # TODO: Update header
         data = self.header.export()
         data += bytes([0] * (self.sector_size - self.header.SIZE))
-        for partition in self._partitions:
-            data += partition.export()
+        for i in range(self.MAX_PARTITIONS):
+            data += bytes([0] * PartitionEntry.SIZE) if self._partitions[i] is None else self._partitions[i].export()
         return data
 
     @classmethod
     def parse(cls, data, offset=0, sector_size=512):
-        obj = cls(Header.parse(data, offset))
-        for i in range(obj.header.number_of_partition_entries):
+        gpt = cls(Header.parse(data, offset))
+        for i in range(gpt.header.number_of_partition_entries):
             pentry = PartitionEntry.parse(data, offset + sector_size)
             offset += PartitionEntry.SIZE
             if pentry.first_lba != 0 and pentry.last_lba != 0:
-                obj.append(pentry)
-        return obj
+                gpt[i] = pentry
+        return gpt
