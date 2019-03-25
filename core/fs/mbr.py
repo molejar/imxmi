@@ -112,6 +112,25 @@ class PartitionEntry(object):
         self.lba_start = 0
         self.num_sectors = 0
 
+    def __eq__(self, obj):
+        if not isinstance(obj, PartitionEntry):
+            return False
+        if self.bootable != obj.bootable or \
+           self.partition_type != obj.partition_type or \
+           self.start_head != obj.start_head or \
+           self.start_sector != obj.start_sector or \
+           self.start_cylinder != obj.start_cylinder or \
+           self.end_head != obj.end_head or \
+           self.end_sector != obj.end_sector or \
+           self.end_cylinder != obj.end_cylinder or \
+           self.lba_start != obj.lba_start or \
+           self.num_sectors != obj.num_sectors:
+            return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
+
     def info(self):
         """ Return Partition-Entry info """
         nfo = str()
@@ -188,6 +207,21 @@ class MBR(object):
         if bootstrap is not None:
             self.bootstrap = bootstrap
 
+    def __eq__(self, obj):
+        if not isinstance(obj, MBR):
+            return False
+        if self.bootstrap != obj.bootstrap:
+            return False
+        if len(self._partitions) != len(obj):
+            return False
+        for index, part in self._partitions.items():
+            if part != obj[index]:
+                return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
+
     def __len__(self):
         return len(self._partitions)
 
@@ -240,7 +274,7 @@ class MBR(object):
         :param offset: The offset in bytes array
         :return: MBR object
         """
-        if len(data) < (cls.SIZE + offset):
+        if len(data) < (offset + cls.SIZE):
             raise MBRError()
         if unpack_from("<H", data, offset + (cls.SIZE - 2))[0] != cls.SIGNATURE:
             raise MBRError()

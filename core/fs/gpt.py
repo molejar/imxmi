@@ -76,7 +76,19 @@ class PartitionType(Enum):
     # TODO: ...
 
     # Android
-    # TODO: ...
+    ANDROID_BOOTLOADER = (0x2568845D23324675BC398FA5A4748D15, 'Android: Bootloader')
+    ANDROID_BOOTLOADER2 = (0x114EAFFE15524022B26E9B053604CF84, 'Android: Bootloader 2')
+    ANDROID_BOOT = (0x49A4D17F93A345C1A0DEF50B2EBE2599, 'Android: Boot')
+    ANDROID_RECOVERY = (0x4177C7229E924AAB864443502BFD5506, 'Android: Recovery')
+    ANDROID_MISC = (0xEF32A33BA409486C91419FFB711F6266, 'Android: Misc')
+    ANDROID_METADATA = (0x20AC26BE20B711E384C56CFDB94711E9, 'Android: Metadata')
+    ANDROID_SYSTEM = (0x38F428E6D326425D91406E0EA133647C, 'Android: System')
+    ANDROID_CACHE = (0xA893EF21E428470A9E550668FD91A2D9, 'Android: Cache')
+    ANDROID_DATA = (0xDC76DDA95AC1491CAF42A82591580C0D, 'Android: Data')
+    ANDROID_PERSISTENT = (0xEBC597D020534B158B64E0AAC75F4DB1, 'Android: Persistent')
+    ANDROID_VENDOR = (0xC5A0AEEC13EA11E5A1B1001E67CA0C3C, 'Android: Vendor')
+    ANDROID_CONFIG = (0xBD59408B4514490DBF129878D963F378, 'Android: Config')
+    ANDROID_FACTORY = (0x8F68CC74C5E548DABE91A0C8C15E9C80, 'Android: Factory')
 
 
 class Header(object):
@@ -115,6 +127,25 @@ class Header(object):
         self.number_of_partition_entries = 0
         self.size_of_partition_entry = 0
         self.partition_entry_array_crc32 = 0
+
+    def __eq__(self, obj):
+        if not isinstance(obj, Header):
+            return False
+        if self.revision != obj.revision or \
+           self.current_lba != obj.current_lba or \
+           self.backup_lba != obj.backup_lba or \
+           self.first_usable_lba != obj.first_usable_lba or \
+           self.last_usable_lba != obj.last_usable_lba or \
+           self.disk_guid != obj.disk_guid or \
+           self.partition_entry_lba != obj.partition_entry_lba or \
+           self.number_of_partition_entries != obj.number_of_partition_entries or \
+           self.size_of_partition_entry != obj.size_of_partition_entry or \
+           self.partition_entry_array_crc32 != obj.partition_entry_array_crc32:
+            return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
 
     def info(self):
         nfo = str()
@@ -191,6 +222,21 @@ class PartitionEntry(object):
         self.last_lba = 0
         self.attribute_flags = 0
 
+    def __eq__(self, obj):
+        if not isinstance(obj, PartitionEntry):
+            return False
+        if self.partition_name != obj.partition_name or \
+           self.partition_type != obj.partition_type or \
+           self.partition_guid != obj.partition_guid or \
+           self.first_lba != obj.first_lba or \
+           self.last_lba != obj.last_lba or \
+           self.attribute_flags != obj.attribute_flags:
+            return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
+
     def info(self):
         nfo = str()
         nfo += " Part. Name:   {}\n".format(self.partition_name)
@@ -241,6 +287,21 @@ class GPT(object):
         self.header = header
         self.sector_size = 512
         self._partitions = {}
+
+    def __eq__(self, obj):
+        if not isinstance(obj, GPT):
+            return False
+        if self.header != obj.header or self.sector_size != obj.sector_size:
+            return False
+        if len(self._partitions) != len(obj):
+            return False
+        for index, part in self._partitions.items():
+            if part != obj[index]:
+                return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
 
     def __len__(self):
         return len(self._partitions)
