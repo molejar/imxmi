@@ -251,8 +251,8 @@ class MBR(object):
         """ Return MBR info """
         nfo = str()
         for i, partition in self._partitions.items():
-            nfo += " < MBR Partition {} > ".format(i)
-            nfo += "-" * 40 + "\n"
+            nfo += " < MBR: Partition {} > ".format(i)
+            nfo += "-" * 39 + "\n"
             nfo += partition.info()
             nfo += " " + "-" * 60 + "\n\n"
         return nfo

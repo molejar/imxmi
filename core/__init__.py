@@ -5,6 +5,7 @@
 # or at https://spdx.org/licenses/BSD-3-Clause.html#licenseText
 
 from .fs import mbr, gpt, fat
+from .image import LinuxImage
 
 __author__  = "Martin Olejar"
 __contact__ = "martin.olejar@gmail.com"
