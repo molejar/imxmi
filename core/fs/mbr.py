@@ -9,9 +9,17 @@ from struct import pack, unpack_from, calcsize
 from easy_enum import EEnum as Enum
 
 
+########################################################################################################################
+# MBR Exceptions
+########################################################################################################################
+
 class MBRError(Exception):
     pass
 
+
+########################################################################################################################
+# MBR Enums
+########################################################################################################################
 
 class PartitionType(Enum):
     """ MBR Partition Type """
@@ -72,6 +80,10 @@ class PartitionType(Enum):
     VMWARE_SWAP = (0xFC, 'VMware Swap')
     LINUX_RAID = (0xFD, 'Linux RAID')
 
+
+########################################################################################################################
+# MBR Classes
+########################################################################################################################
 
 class PartitionEntry(object):
     """ MBR Partition Entry """
@@ -237,14 +249,17 @@ class MBR(object):
         self._partitions[key] = value
 
     def __iter__(self):
-        return self._partitions.__iter__()
+        return iter(self._partitions.values())
 
     def clear(self):
         """ Remove all partitions entry """
         self._partitions.clear()
 
     def dell(self, index):
-        """ Remove selected partition entry """
+        """ Remove selected partition entry
+        :param index: partitions entry index
+        :return removed object
+        """
         return self._partitions.pop(index)
 
     def info(self):

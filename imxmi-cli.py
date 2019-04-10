@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2017-2018 Martin Olejar
+# Copyright (c) 2019 Martin Olejar
 #
 # SPDX-License-Identifier: BSD-3-Clause
 # The BSD-3-Clause license for this file can be found in the LICENSE file included with this distribution
@@ -11,14 +11,14 @@ import sys
 import yaml
 import click
 # local module
-import core
+from core import __version__, LinuxImage
 
 
 # Application error code
 ERROR_CODE = 1
 
 # Application version
-VERSION = core.__version__
+VERSION = __version__
 
 # Application description
 DESCRIPTION = (
@@ -34,8 +34,28 @@ def cli():
 
 
 @cli.command(short_help="List i.MX boot image info")
-@click.option('-t', '--type', type=click.Choice(['auto', 'sd', 'emmc', 'imx']),
-              default='auto', show_default=True, help="Image type")
+@click.option('-s', '--system', type=click.Choice(['linux', 'android']),
+              default='linux', show_default=True, help="Image OS type")
 @click.argument('file', nargs=1, type=click.Path(exists=True))
-def info(type, file):
-    pass
+def info(system, file):
+
+    if system is 'linux':
+        with LinuxImage.open(file) as img:
+            img.parse()
+            click.echo(img.info())
+    else:
+        pass
+
+
+@cli.command(short_help="Extract i.MX boot image content")
+@click.option('-o', '--outdir', default=None, help="Output directory")
+@click.option('-s', '--system', type=click.Choice(['linux', 'android']),
+              default='linux', show_default=True, help="Image OS type")
+@click.argument('file', nargs=1, type=click.Path(exists=True))
+def extract(system, outdir, file):
+    if system is 'linux':
+        with LinuxImage.open(file) as img:
+            img.parse()
+            click.echo(img.info())
+    else:
+        pass

@@ -4,11 +4,6 @@
 # The BSD-3-Clause license for this file can be found in the LICENSE file included with this distribution
 # or at https://spdx.org/licenses/BSD-3-Clause.html#licenseText
 
-from .fs import mbr, gpt, fat, ext
-from .image import LinuxImage
+import pytest
+import core
 
-__author__  = "Martin Olejar"
-__contact__ = "martin.olejar@gmail.com"
-__version__ = "0.0.1"
-__license__ = "BSD 3"
-__status__  = "Development"

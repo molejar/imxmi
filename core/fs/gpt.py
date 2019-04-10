@@ -7,89 +7,86 @@
 import uuid
 import binascii
 from struct import pack, unpack_from, calcsize
-from easy_enum import EEnum as Enum
 
+########################################################################################################################
+# common
+########################################################################################################################
+
+PART_DESC = {
+
+    # General
+    '00000000-0000-0000-0000-000000000000': "Unused entry",
+    '024dee41-33e7-11d3-9d69-0008c781f39f': "MBR Partition Scheme",
+    'c12a7328-f81f-11d2-ba4b-00a0c93ec93b': "EFI System Partition",
+    '21686148-6449-6e6f-744e-656564454649': "BIOS Boot Partition",
+    'd3bfe2de-3daf-11df-ba40-e3a556d89593': "Intel Fast Flash (iFFS) partition",
+    'f4019732-066e-4e12-8273-346c5641494f': "Sony Boot Partition",
+    'bfbfafe7-a34f-448a-9a5b-6213eb736c22': "Lenovo Boot Partition",
+
+    # Windows
+    'ebd0a0a2-b9e5-4433-87c0-68b6b72699c7': "Windows: Basic Data Partition",
+    'e3c9e316-0b5c-4db8-817d-f92df00215ae': "Windows: Microsoft Reserved Partition",
+    'af9b60a0-1431-4f62-bc68-3311714a69ad': "Windows: Logical Disk Manager (LDM) Data Partition",
+    'de94bba4-06d1-4d40-a16a-bfd50179d6ac': "Windows: Windows Recovery Environment",
+    '37affc90-ef7d-4e96-91c3-2d7ae055b174': "Windows: IBM General Parallel File System (GPFS) Partition",
+    'e75caf8f-f680-4cee-afa3-b001e56efc2d': "Windows: Storage Spaces Partition",
+    'db97dba9-0840-4bae-97f0-ffb9a327c7e1': "Windows: Cluster Metadata Partition",
+
+    # HP-UX
+    '75894c1e-3aeb-11d3-b7c1-7b03a0000000': "HP-UX: Data Partition",
+    'e2a1e728-32e3-11d6-a682-7b03a0000000': "HP-UX: Service Partition",
+
+    # Linux
+    '0fc63daf-8483-4772-8e79-3d69d8477de4': "Linux: Filesystem Data Partition",
+    'a19d880f-05fc-4d3b-a006-743f0f84911e': "Linux: RAID Partition",
+    '0657fd6d-a4ab-43c4-84e5-0933c84b4f4f': "Linux: SWAO Partition",
+    'e6d6d379-f507-44c2-a23c-238f2a3df928': "Linux: Logical Volume Manager (LVM) Partition",
+    '8da63339-0007-60c0-c436-083ac8230908': "Linux: Reserved Partition",
+
+    # FreeBSD
+    '83bd6b9d-7f41-11dc-be0b-001560b84f0f': "FreeBSD: Boot Partition",
+    '516e7cb4-6ecf-11d6-8ff8-00022d09712b': "FreeBSD: Data Partition",
+    '516e7cb5-6ecf-11d6-8ff8-00022d09712b': "FreeBSD: Swap Partition",
+    '516e7cb6-6ecf-11d6-8ff8-00022d09712b': "FreeBSD: Unix File System (UFS) Partition",
+    '516e7cb8-6ecf-11d6-8ff8-00022d09712b': "FreeBSD: Vinum Volume Manager / RAID Partition",
+    '516e7cba-6ecf-11d6-8ff8-00022d09712b': "FreeBSD: ZFS Partition",
+
+    # NetBSD
+    '49f48d32-b10e-11dc-b99b-0019d1879648': "NetBSD: Swap Partition",
+    '49f48daa-b10e-11dc-b99b-0019d1879648': "NetBSD: RAID Partition",
+    '49f48d5a-b10e-11dc-b99b-0019d1879648': "NetBSD: FFS Partition",
+    '49f48d82-b10e-11dc-b99b-0019d1879648': "NetBSD: LFS Partition",
+    '2db519c4-b10f-11dc-b99b-0019d1879648': "NetBSD: Concatenated Partition",
+    '2db519ec-b10f-11dc-b99b-0019d1879648': "NetBSD: Encrypted Partition",
+
+    # Android
+    '2568845d-2332-4675-bc39-8fa5a4748d15': "Android: Bootloader",
+    '114eaffe-1552-4022-b26e-9b053604cf84': "Android: Bootloader 2",
+    '49a4d17f-93a3-45c1-a0de-f50b2ebe2599': "Android: Boot",
+    '4177c722-9e92-4aab-8644-43502bfd5506': "Android: Recovery",
+    'ef32a33b-a409-486c-9141-9ffb711f6266': "Android: Misc",
+    '20ac26be-20b7-11e3-84c5-6cfdb94711e9': "Android: Metadata",
+    '38f428e6-d326-425d-9140-6e0ea133647c': "Android: System",
+    'a893ef21-e428-470a-9e55-0668fd91a2d9': "Android: Cache",
+    'dc76dda9-5ac1-491c-af42-a82591580c0d': "Android: Data",
+    'ebc597d0-2053-4b15-8b64-e0aac75f4db1': "Android: Persistent",
+    'c5a0aeec-13ea-11e5-a1b1-001e67ca0c3c': "Android: Vendor",
+    'bd59408b-4514-490d-bf12-9878d963f378': "Android: Config",
+    '8f68cc74-c5e5-48da-be91-a0c8c15e9c80': "Android: Factory",
+}
+
+
+########################################################################################################################
+# GPT Exceptions
+########################################################################################################################
 
 class GPTError(Exception):
     pass
 
 
-class PartitionType(Enum):
-    """ GPT Partition Type """
-
-    # General
-    UNUSED_ENTRY = (0x00000000000000000000000000000000, 'Unused entry')
-    MBR_PART_SCHEME = (0x024DEE4133E711D39D690008C781F39F, 'MBR Partition Scheme')
-    EFI_SYSTEM = (0xC12A7328F81F11D2BA4B00A0C93EC93B, 'EFI System Partition')
-    BIOS_BOOT = (0x2168614864496E6F744E656564454649, 'BIOS Boot Partition')
-    INTEL_FAST_FLASH = (0xD3BFE2DE3DAF11DFBA40E3A556D89593, 'Intel Fast Flash (iFFS) partition')
-    SONY_BOOT = (0xF4019732066E4E128273346C5641494F, 'Sony Boot Partition')
-    LENOVO_BOOT = (0xBFBFAFE7A34F448A9A5B6213EB736C22, 'Lenovo Boot Partition')
-
-    # Windows
-    WIN_BASIC_DATA = (0xEBD0A0A2B9E5443387C068B6B72699C7, 'Windows: Basic Data Partition')
-    WIN_MS_RESERVED = (0xE3C9E3160B5C4DB8817DF92DF00215AE, 'Windows: Microsoft Reserved Partition')
-    WIN_LDM_METADATA = (0xEBD0A0A2B9E5443387C068B6B72699C7, 'Windows: Logical Disk Manager (LDM) Metadata Partition')
-    WIN_LDM_DATA = (0xAF9B60A014314F62BC683311714A69AD, 'Windows: Logical Disk Manager (LDM) Data Partition')
-    WIN_RECOVERY_ENV = (0xDE94BBA406D14D40A16ABFD50179D6AC, 'Windows: Windows Recovery Environment')
-    WIN_IBM_GPFS = (0x37AFFC90EF7D4E9691C32D7AE055B174, 'Windows: IBM General Parallel File System (GPFS) Partition')
-    WIN_STORAGE_SPACES = (0xE75CAF8FF6804CEEAFA3B001E56EFC2D, 'Windows: Storage Spaces Partition')
-    WIN_CLUSTER_METADATA = (0xDB97DBA908404BAE97F0FFB9A327C7E1, 'Windows: Cluster Metadata Partition')
-
-    # HP-UX
-    HPUX_DATA = (0x75894C1E3AEB11D3B7C17B03A0000000, 'HP-UX: Data Partition')
-    HPUX_SERVICE = (0xE2A1E72832E311D6A6827B03A0000000, 'HP-UX: Service Partition')
-
-    # Linux
-    LINUX_FS_DATA = (0x0FC63DAF848347728E793D69D8477DE4, 'Linux: Filesystem Data Partition')
-    LINUX_RAID = (0xA19D880F05FC4D3BA006743F0F84911E, 'Linux: RAID Partition')
-    LINUX_SWAO = (0x0657FD6DA4AB43C484E50933C84B4F4F, 'Linux: SWAO Partition')
-    LINUX_LVM = (0xE6D6D379F50744C2A23C238F2A3DF928, 'Linux: Logical Volume Manager (LVM) Partition')
-    LINUX_RESERVED = (0x8DA63339000760C0C436083AC8230908, 'Linux: Reserved Partition')
-
-    # FreeBSD
-    FBSD_BOOT = (0x83BD6B9D7F4111DCBE0B001560B84F0F, 'FreeBSD: Boot Partition')
-    FBSD_DATA = (0x516E7CB46ECF11D68FF800022D09712B, 'FreeBSD: Data Partition')
-    FBSD_SWAP = (0x516E7CB56ECF11D68FF800022D09712B, 'FreeBSD: Swap Partition')
-    FBSD_UFS = (0x516E7CB66ECF11D68FF800022D09712B, 'FreeBSD: Unix File System (UFS) Partition')
-    FBSD_VVM = (0x516E7CB86ECF11D68FF800022D09712B, 'FreeBSD: Vinum Volume Manager / RAID Partition')
-    FBSD_ZFS = (0x516E7CBA6ECF11D68FF800022D09712B, 'FreeBSD: ZFS Partition')
-
-    # NetBSD
-    NBSD_SWAP = (0x49F48D32B10E11DCB99B0019D1879648, 'NetBSD: Swap Partition')
-    NBSD_RAID = (0x49F48DAAB10E11DCB99B0019D1879648, 'NetBSD: RAID Partition')
-    NBSD_FFS = (0x49F48D5AB10E11DCB99B0019D1879648, 'NetBSD: FFS Partition')
-    NBSD_LFS = (0x49F48D82B10E11DCB99B0019D1879648, 'NetBSD: LFS Partition')
-    NBSD_CONCATENATED = (0x2DB519C4B10F11DCB99B0019D1879648, 'NetBSD: Concatenated Partition')
-    NBSD_ENCRIPTED = (0x2DB519ECB10F11DCB99B0019D1879648, 'NetBSD: Encrypted Partition')
-
-    # QNX
-    # TODO: ...
-
-    # Mac OSX
-    # TODO: ...
-
-    # Solaris
-    # TODO: ...
-
-    # Chrome OS
-    # TODO: ...
-
-    # Android
-    ANDROID_BOOTLOADER = (0x2568845D23324675BC398FA5A4748D15, 'Android: Bootloader')
-    ANDROID_BOOTLOADER2 = (0x114EAFFE15524022B26E9B053604CF84, 'Android: Bootloader 2')
-    ANDROID_BOOT = (0x49A4D17F93A345C1A0DEF50B2EBE2599, 'Android: Boot')
-    ANDROID_RECOVERY = (0x4177C7229E924AAB864443502BFD5506, 'Android: Recovery')
-    ANDROID_MISC = (0xEF32A33BA409486C91419FFB711F6266, 'Android: Misc')
-    ANDROID_METADATA = (0x20AC26BE20B711E384C56CFDB94711E9, 'Android: Metadata')
-    ANDROID_SYSTEM = (0x38F428E6D326425D91406E0EA133647C, 'Android: System')
-    ANDROID_CACHE = (0xA893EF21E428470A9E550668FD91A2D9, 'Android: Cache')
-    ANDROID_DATA = (0xDC76DDA95AC1491CAF42A82591580C0D, 'Android: Data')
-    ANDROID_PERSISTENT = (0xEBC597D020534B158B64E0AAC75F4DB1, 'Android: Persistent')
-    ANDROID_VENDOR = (0xC5A0AEEC13EA11E5A1B1001E67CA0C3C, 'Android: Vendor')
-    ANDROID_CONFIG = (0xBD59408B4514490DBF129878D963F378, 'Android: Config')
-    ANDROID_FACTORY = (0x8F68CC74C5E548DABE91A0C8C15E9C80, 'Android: Factory')
-
+########################################################################################################################
+# GPT Classes
+########################################################################################################################
 
 class Header(object):
 
@@ -109,7 +106,7 @@ class Header(object):
                             self.backup_lba,
                             self.first_usable_lba,
                             self.last_usable_lba,
-                            self.disk_guid.to_bytes(16, 'little'),
+                            self.disk_guid.bytes_le,
                             self.partition_entry_lba,
                             self.number_of_partition_entries,
                             self.size_of_partition_entry,
@@ -122,7 +119,7 @@ class Header(object):
         self.backup_lba = 0
         self.first_usable_lba = 0
         self.last_usable_lba = 0
-        self.disk_guid = 0
+        self.disk_guid = uuid.uuid4()
         self.partition_entry_lba = 0
         self.number_of_partition_entries = 0
         self.size_of_partition_entry = 0
@@ -154,7 +151,7 @@ class Header(object):
         nfo += " Backup LBA:       {}\n".format(self.backup_lba)
         nfo += " First Usable LBA: {}\n".format(self.first_usable_lba)
         nfo += " Last Usable LBA:  {}\n".format(self.last_usable_lba)
-        nfo += " Disk GUID:        {}\n".format(uuid.UUID(int=self.disk_guid))
+        nfo += " Disk GUID:        {}\n".format(self.disk_guid)
         nfo += " Entries Count:    {}\n".format(self.number_of_partition_entries)
         nfo += " Part. Entry LBA:  {}\n".format(self.last_usable_lba)
         nfo += " Part. Entry Size: {}\n".format(self.size_of_partition_entry)
@@ -172,7 +169,7 @@ class Header(object):
                     self.backup_lba,
                     self.first_usable_lba,
                     self.last_usable_lba,
-                    self.disk_guid.to_bytes(16, 'little'),
+                    self.disk_guid.bytes_le,
                     self.partition_entry_lba,
                     self.number_of_partition_entries,
                     self.size_of_partition_entry,
@@ -199,7 +196,7 @@ class Header(object):
             obj.size_of_partition_entry,
             obj.partition_entry_array_crc32
         ) = unpack_from(cls.FORMAT, data, offset)
-        obj.disk_guid = int.from_bytes(disk_guid, 'little')
+        obj.disk_guid = uuid.UUID(bytes_le=disk_guid)
         if signature != cls.SIGNATURE:
             raise GPTError('Bad signature: %r' % signature)
         if header_size != cls.SIZE:
@@ -216,8 +213,8 @@ class PartitionEntry(object):
 
     def __init__(self):
         self.partition_name = ''
-        self.partition_type = 0
-        self.partition_guid = 0
+        self.partition_type = uuid.UUID('00000000-0000-0000-0000-000000000000')
+        self.partition_guid = uuid.uuid4()
         self.first_lba = 0
         self.last_lba = 0
         self.attribute_flags = 0
@@ -240,10 +237,8 @@ class PartitionEntry(object):
     def info(self):
         nfo = str()
         nfo += " Part. Name:   {}\n".format(self.partition_name)
-        nfo += " Part. Type:   {}\n".format(PartitionType[self.partition_type] if
-                                            PartitionType.is_valid(self.partition_type) else
-                                            uuid.UUID(int=self.partition_type))
-        nfo += " Part. GUID:   {}\n".format(uuid.UUID(int=self.partition_guid))
+        nfo += " Part. Type:   {}\n".format(PART_DESC.get(str(self.partition_type), str(self.partition_type)))
+        nfo += " Part. GUID:   {}\n".format(self.partition_guid)
         nfo += " First LBA:    {}\n".format(self.first_lba)
         nfo += " Last  LBA:    {}\n".format(self.last_lba)
         nfo += " Attr. Flags:  0x{:X}\n".format(self.attribute_flags)
@@ -251,8 +246,8 @@ class PartitionEntry(object):
 
     def export(self):
         return pack(self.FORMAT,
-                    self.partition_type.to_bytes(16, 'little'),
-                    self.partition_guid.to_bytes(16, 'little'),
+                    self.partition_type.bytes_le,
+                    self.partition_guid.bytes_le,
                     self.first_lba,
                     self.last_lba,
                     self.attribute_flags,
@@ -271,8 +266,8 @@ class PartitionEntry(object):
             obj.attribute_flags,
             partition_name
         ) = unpack_from(cls.FORMAT, data, offset)
-        obj.partition_type = int.from_bytes(partition_type, 'little')
-        obj.partition_guid = int.from_bytes(partition_guid, 'little')
+        obj.partition_type = uuid.UUID(bytes_le=partition_type)
+        obj.partition_guid = uuid.UUID(bytes_le=partition_guid)
         obj.partition_name = partition_name.decode('utf-16').strip('\0')
         return obj
 
@@ -318,7 +313,7 @@ class GPT(object):
         self._partitions[key] = value
 
     def __iter__(self):
-        return self._partitions.__iter__()
+        return iter(self._partitions.values())
 
     def clear(self):
         self._partitions.clear()
