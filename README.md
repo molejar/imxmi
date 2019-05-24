@@ -28,8 +28,8 @@ will exist installation packages later, at this moment use raw sources.
 In case of development clone this repo into your PC and install all dependencies:
 
 ``` bash
-    $ git clone https://github.com/molejar/imxsb.git
-    $ cd imxsb
+    $ git clone https://github.com/molejar/imxmi.git
+    $ cd imxmi
     $ pip install -r requirements.txt
 ```
 
