@@ -1,7 +1,5 @@
-i.MX MakeImage Tool
-===================
-
-## SMX File
+i.MX MakeImage Tool - SMX File
+==============================
 
 The SMX file is a standard text file which collect all parts of i.MX boot image. Thanks to YAML syntax is human-readable 
 and easy modifiable. Comments in SMX file start with the hash character `#` and extend to the end of the physical line. A 

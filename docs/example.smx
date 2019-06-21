@@ -2,15 +2,14 @@
 # *************************************************************
 # Target Description
 # *************************************************************
-HEAD:
-  NAME: i.MX7D Sabre SD
-  DESC: Example of Smart-Boot script for i.MX7SD
-  CHIP: MX7SD
+name: i.MX7D Sabre SD
+description: Example of Smart-Boot script for i.MX7SD
+platform: MX7SD
 
 # *************************************************************
 # Variables
 # *************************************************************
-VARS:
+variables:
     # ---------------------------------------------------------
     # Target Specific Variables
     # ---------------------------------------------------------
@@ -37,11 +36,11 @@ VARS:
 # *************************************************************
 # Data Segments
 # *************************************************************
-DATA:
+data_segments:
+    # DDR Data >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     ddr3.dcd:
-        DESC: Device Configuration Data
-        ADDR: "{{ OCRAM_ADDR }}"
-        DATA: |
+        address: "{{ OCRAM_ADDR }}"
+        data: |
             # DDR init
             WriteValue    4 0x30340004 0x4F400005
             WriteValue    4 0x30391000 0x00000002
@@ -96,43 +95,104 @@ DATA:
             WriteValue    4 0x30790018 0x0000000F
             CheckAnyClear 4 0x307A0004 0x00000001
 
+    # CSF Data >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    hab_config.csf:
+        header:
+            version: '4.1'
+            hash_algorithm: 'sha256'
+            engine_configuration: 0
+            certificate_format: 'X509'
+            signature_format: 'CMS'
+            engine: 'CAAM'
+
+        install_srk:
+            source_index: 0
+            file: ""
+
+        install_csfk:
+            file: ""
+
+        unlock_commands:
+
+            - engine: 'CAAM'
+              features: 'RNG'
+
+            - engine: 'CAAM'
+              features: 'RNG'
+
+        install_key:
+            verification_index: 0
+            target_index: 0
+            FILE: ""
+
+        authenticate_data:
+            verification_index: 0
+            blocks:
+
+                - address: "0x5000"
+                  offset: 0x400
+                  size: "1024"
+
+                - address: 0x5000
+                  offset: 0x400
+                  size: 1024
+
+        install_secret_key:
+            verification_index: 0
+            target_index: 0
+            key_path: ""
+            key_length: 20
+            blob_address: 0x500
+
+        decrypt_data:
+            verification_index: 0
+            mac_bytes: 5
+            blocks:
+                - Address: "0x5000"
+                  OFFSET: 0x400
+                  size: 1024
+
     uboot_img0.imx2:
-        DESC: U-Boot Image
-        FILE: imx7d_sdb/u-boot.imx
+        description: U-Boot Image
+        file: imx7d_sdb/u-boot.imx
+        # ...
+        seco: hab_config.csf
         # Environment variables insert mode (disabled, merge or replace)
-        MODE: merge
+        mode: merge
         # Environment variables start mark in u-boot image
-        MARK: bootcmd=
+        mark: bootcmd=
         # Environment variables
-        EVAL: |
+        eval: |
             bootdelay = 0
             bootcmd = bootz ${loadaddr} ${initrd_addr} ${fdt_addr};
 
     uboot_img1.imx2:
-        DESC: U-Boot image for running network boot script
-        FILE: imx7d_sdb/u-boot.imx
+        description: U-Boot image for running network boot script
+        file: imx7d_sdb/u-boot.imx
+        # ...
+        SECO: hab_config.csf
         # Environment variables insert mode (disabled, merge or replace)
-        MODE: merge
+        mode: merge
         # Environment variables start mark in u-boot image
-        MARK: bootcmd=
+        mark: bootcmd=
         # Environment variables
-        EVAL: |
+        eval: |
             bootdelay = 0
             bootcmd = echo Running network boot script ...; source {{ SCRIM_ADDR }}
 
     kernel_image.raw:
-        DESC: Kernel Image
-        ADDR: "{{ IMAGE_ADDR }}"
-        FILE: imx7d_sdb/zImage
+        description: Kernel Image
+        address: "{{ IMAGE_ADDR }}"
+        file: imx7d_sdb/zImage
 
     kernel_dtb.fdt:
-        DESC: Device Tree Blob
-        ADDR: "{{ DTBIM_ADDR }}"
-        FILE: imx7d_sdb/imx7d-sdb.dtb
+        description: Device Tree Blob
+        address: "{{ DTBIM_ADDR }}"
+        file: imx7d_sdb/imx7d-sdb.dtb
         # insert mode (disabled, merge)
-        MODE: merge
+        mode: merge
         # modifications in loaded file
-        DATA: |
+        data: |
             // ** Add support for M4 core **
 
             // version: 17
@@ -180,16 +240,16 @@ DATA:
             };
 
     initramfs_image.raw:
-        DESC: RAMDisk Image
-        ADDR: 0x83800000
-        FILE: initramfs.bin
+        description: RAMDisk Image
+        address: 0x83800000
+        file: initramfs.bin
 
     uboot_script0.ubx:
-        DESC: U-Boot Script 0
-        ADDR: "{{ SCRIM_ADDR }}"
-        HEAD:
-            image: script
-        DATA: |
+        description: U-Boot Script 0
+        address: "{{ SCRIM_ADDR }}"
+        header:
+            image_type: script
+        data: |
             echo '>> Network Boot ...'
             setenv autoload 'no'
             #dhcp
@@ -217,11 +277,11 @@ DATA:
             run netboot
 
     uboot_script1.ubx:
-        DESC: U-Boot Script 1
-        ADDR: "{{ SCRIM_ADDR }}"
-        HEAD:
-            image: script
-        DATA: |
+        description: U-Boot Script 1
+        address: "{{ SCRIM_ADDR }}"
+        header:
+            image_type: script
+        data: |
             echo '>> Network Boot ...'
             setenv autoload 'no'
             dhcp
@@ -252,18 +312,34 @@ DATA:
             # ----------------------------------
             run netboot
 
-
-# *************************************************************
-# Image description
-# *************************************************************
-BODY:
-    mbr: msdos
-    bootloader:
-        offset: 1000
-        data: uboot_img1.imx2
-
-    ubootenv:
-        offset: 1000
+    uboot_variables.uev:
+        description: U-Boot ENV
+        uboot_image: imx7d_sdb/u-boot.imx
         data:
 
-    partition1:
+
+# *************************************************************
+# Images description
+# *************************************************************
+linux_sd_image:
+    bootloader:
+        offset: 1000
+        image: uboot_img1.imx2
+
+    uboot_env:
+        offset: 1000
+        image: uboot_variables.uev
+
+    partitions:
+        - name: kernel
+          type: FAT32
+          offset: 512
+          size: 10000
+          data:
+            - image: uboot_script1.ubx
+              name: boot.scr
+            - file: imx7d_sdb/imx7d-sdb.dtb
+
+        - name: rootfs
+          type: LINUX
+          file: rootfs.img

@@ -59,3 +59,11 @@ def extract(system, outdir, file):
             click.echo(img.info())
     else:
         pass
+
+
+def main():
+    cli(obj={})
+
+
+if __name__ == '__main__':
+    main()

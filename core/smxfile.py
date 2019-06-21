@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2019 Martin Olejar
+# Copyright (c) 2019 Martin Olejar
 #
 # SPDX-License-Identifier: BSD-3-Clause
 # The BSD-3-Clause license for this file can be found in the LICENSE file included with this distribution
@@ -10,9 +10,11 @@ import imx
 import yaml
 import jinja2
 
+from voluptuous import Optional, Required, Range, All, Any, Schema, ALLOW_EXTRA
+
 # internals
 from .segments import DatSegFDT, DatSegDCD, DatSegIMX2, DatSegIMX2B, DatSegIMX3, DatSegRAW, DatSegUBI, \
-                      DatSegUBX, DatSegUBT
+                      DatSegUBX, DatSegUBT, DatSegUEV, DatSegCSF
 from .fs import mbr, gpt, fat, ext
 
 
@@ -25,12 +27,77 @@ def fmt_size(num, kibibyte=True):
     return "{0:3.1f} {1:s}".format(num, x)
 
 
+class SafeCustomLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = super(SafeCustomLoader, self).construct_mapping(node, deep=deep)
+
+        # Convert all KEYS to lowercase
+        keys = mapping.keys()
+        for key in keys:
+            if key.startswith('_') or key.endswith('_'):
+                continue
+            value = mapping.pop(key)
+            mapping[key.lower()] = value
+
+        # Add line number in YAML file for parsed KEY
+        mapping['__line__'] = node.start_mark.line + 1
+        return mapping
+
+
 class ParseError(Exception):
     """Thrown when parsing a file fails"""
     pass
 
 
-class SmxImage(object):
+class SmxLinuxImage(object):
+    """ Boot Image class
+
+        linux_sd_image:
+            bootloader:
+                offset: int or str (required)
+                <file or image>: str (required)
+            uboot_env:
+                offset: int or str (required)
+                <file or image>: str (required)
+            partitions:
+                - name: str
+                  type: str (required)
+                  offset: int or str
+                  size: int or str
+                  data:
+                    - <file or image>: str (required)
+                      name: str
+
+                - name: str
+                  type: LINUX
+                  offset: int or str
+                  size: int or str
+                  file: str (required)
+    """
+
+    supported_parts = [item[0] for item in mbr.PartitionType]
+
+    SCHEMA = {
+        Required('bootloader'): {
+            Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Required(Any('image', 'file')): str
+        },
+        Optional('uboot_env'): {
+            Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Required(Any('image', 'file')): str
+        },
+        Optional('partitions'): All(list, [{
+            Optional('name'): str,
+            Optional('type'): All(str, Any(*supported_parts)),
+            Optional('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Optional('size'): Any(int, All(str, lambda v: int(v, 0))),
+            Optional('file'): str,
+            Optional('data'): All(list, [{
+                Required(Any('image', 'file')): str,
+                Optional('name'): str
+            }])
+        }])
+    }
 
     def __init__(self, smx_data):
         """ Init SmxImage
@@ -39,15 +106,74 @@ class SmxImage(object):
         """
         assert isinstance(smx_data, dict)
 
-        self.uboot_offset = 0
-        self.uboot_image = None
-        self.ubenv_offset = 0
-        self.ubenv_image = None
-        self.fat_offset = 0
-        self.fat_type = mbr.PartitionType.FAT32
-        self.fat_size = 0
-        self.fat_files = []
-        self.ext_part = None
+        schema = Schema(self.SCHEMA, extra=ALLOW_EXTRA)
+        self.smx_data = schema(smx_data)
+
+    def save(self, path):
+        pass
+
+
+class SmxAndroidImage(object):
+    """ Boot Image class
+
+        android_sd_image:
+            mbr_type: srt
+            bootloader:
+                offset: int or str (required)
+                <file or image>: str (required)
+            uboot_env:
+                offset: int or str (required)
+                <file or image>: str (required)
+            partitions:
+                - name: str
+                  type: str (required)
+                  offset: int or str
+                  size: int or str
+                  data:
+                    - <file or image>: str (required)
+                      name: str
+
+                - name: str
+                  type: LINUX
+                  offset: int or str
+                  size: int or str
+                  file: str (required)
+    """
+
+    supported_parts = [item[0] for item in mbr.PartitionType]
+
+    SCHEMA = {
+        Required('mbr_type'): str,
+        Required('bootloader'): {
+            Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Required(Any('image', 'file')): str
+        },
+        Optional('uboot_env'): {
+            Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Required(Any('image', 'file')): str
+        },
+        Optional('partitions'): All(list, [{
+            Optional('name'): str,
+            Optional('type'): All(str, Any(*supported_parts)),
+            Optional('offset'): Any(int, All(str, lambda v: int(v, 0))),
+            Optional('size'): Any(int, All(str, lambda v: int(v, 0))),
+            Optional('file'): str,
+            Optional('data'): All(list, [{
+                Required(Any('image', 'file')): str,
+                Optional('name'): str
+            }])
+        }])
+    }
+
+    def __init__(self, smx_data):
+        """ Init SmxImage
+        :param smx_data:
+        :return object
+        """
+        assert isinstance(smx_data, dict)
+
+        schema = Schema(self.SCHEMA, extra=ALLOW_EXTRA)
+        self.smx_data = schema(smx_data)
 
     def save(self, path):
         pass
@@ -57,6 +183,7 @@ class SmxFile(object):
 
     data_segments = {
         DatSegDCD.MARK: DatSegDCD,
+        DatSegCSF.MARK: DatSegCSF,
         DatSegFDT.MARK: DatSegFDT,
         DatSegIMX2.MARK: DatSegIMX2,
         DatSegIMX2B.MARK: DatSegIMX2B,
@@ -64,37 +191,18 @@ class SmxFile(object):
         DatSegUBI.MARK: DatSegUBI,
         DatSegUBX.MARK: DatSegUBX,
         DatSegUBT.MARK: DatSegUBT,
+        DatSegUEV.MARK: DatSegUEV,
         DatSegRAW.MARK: DatSegRAW
     }
 
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def platform(self):
-        return self._platform
-
-    @property
-    def description(self):
-        return self._description
-
-    @property
-    def scripts(self):
-        return self._body
-
-    @property
-    def path(self):
-        return self._path
-
     def __init__(self, file=None, auto_load=False):
         # private
-        self._name = ""
-        self._description = ""
-        self._platform = None
-        self._path = None
-        self._data = []
-        self._body = None
+        self.name = ""
+        self.description = ""
+        self.platform = None
+        self.path = None
+        self.image = None
+        self.data = []
         # init
         if file is not None:
             self.open(file, auto_load)
@@ -115,67 +223,78 @@ class SmxFile(object):
             txt_data = f.read()
 
         # load core file
-        smx_data = yaml.load(txt_data)
-        if 'VARS' in smx_data:
-            var_data = smx_data['VARS']
+        smx_data = yaml.load(txt_data, Loader=yaml.SafeLoader)
+        if 'variables' in smx_data:
+            var_data = smx_data['variables']
             txt_data = jinja2.Template(txt_data).render(var_data)
-            smx_data = yaml.load(txt_data)
+            smx_data = yaml.load(txt_data, Loader=SafeCustomLoader)
+        else:
+            smx_data = yaml.load(txt_data, Loader=SafeCustomLoader)
 
         # check if all variables have been defined
         # if re.search("\{\{.*x.*\}\}", text_data) is not None:
         #   raise Exception("Some variables are not defined !")
 
         # set absolute path to core file
-        self._path = os.path.abspath(os.path.dirname(file))
-
-        # validate segments in core file
-        if 'HEAD' not in smx_data:
-            raise Exception("HEAD segments doesn't exist inside file: %s" % file)
-        if 'DATA' not in smx_data:
-            raise Exception("DATA segments doesn't exist inside file: %s" % file)
-        if 'BODY' not in smx_data:
-            raise Exception("BODY segments doesn't exist inside file: %s" % file)
-
-        # parse header segments
-        if "CHIP" not in smx_data['HEAD']:
-            raise Exception("CHIP not defined in HEAD segments")
-        if smx_data['HEAD']['CHIP'] not in imx.sdp.supported_devices():
-            raise Exception("Device type not supported !")
-        self._name = smx_data['HEAD']['NAME'] if 'NAME' in smx_data['HEAD'] else ""
-        self._description = smx_data['HEAD']['DESC'] if 'DESC' in smx_data['HEAD'] else ""
-        self._platform = smx_data['HEAD']['CHIP']
+        self.path = os.path.abspath(os.path.dirname(file))
 
         # clear all data
-        self._data = []
-        self._body = None
+        self.name = ""
+        self.description = ""
+        self.platform = None
+        self.image = None
+        self.data = []
 
-        # parse data segments
-        for full_name, data in smx_data['DATA'].items():
-            try:
-                item_name, item_type = full_name.split('.')
-            except ValueError:
-                raise Exception("Not supported data segments format: {}".format(full_name))
-            # case tolerant type
-            item_type = item_type.lower()
-            if item_type not in self.data_segments.keys():
-                raise Exception("Not supported data segments type: {}".format(item_type))
+        for key, value in smx_data.items():
+            if key == 'name':
+                self.name = value
 
-            self._data.append(self.data_segments[item_type](item_name, data))
+            elif key == 'description':
+                self.description = value
 
-        # parse scripts
-        self._body = SmxImage(smx_data['BODY'])
+            elif key == 'platform':
+                self.platform = value
+
+            elif key == 'data_segments':
+                for full_name, data in value.items():
+                    if full_name.startswith('_') or full_name.endswith('_'):
+                        continue
+                    try:
+                        item_name, item_type = full_name.split('.')
+                    except ValueError:
+                        raise Exception("Not supported data segment format: {}".format(full_name))
+                    # case tolerant type
+                    item_type = item_type.lower()
+                    if item_type not in self.data_segments.keys():
+                        raise Exception("Not supported data segments type: {}".format(item_type))
+                    self.data.append(self.data_segments[item_type](item_name, data))
+
+            elif key == 'linux_sd_image':
+                self.image = SmxLinuxImage(value)
+
+            elif key == 'android_sd_image':
+                self.image = SmxAndroidImage(value)
+
+        if self.platform is None:
+            raise Exception("Platform not specified inside: %s" % file)
+        if self.image is None:
+            raise Exception("Key 'boot_image' doesn't exist inside: %s" % file)
+        if not self.data:
+            raise Exception("Key 'data_segments' doesn't exist inside: %s" % file)
 
         if auto_load:
             self.load()
 
     def load(self):
         # load simple data segments
-        for item in self._data:
+        for item in self.data:
             if item.MARK not in (DatSegIMX2.MARK, DatSegIMX2B.MARK, DatSegIMX3.MARK):
-                item.load(self._data, self._path)
+                item.load(self.data, self.path)
 
         # load complex data segments which can include simple data segments
-        for item in self._data:
+        for item in self.data:
             if item.MARK in (DatSegIMX2.MARK, DatSegIMX2B.MARK, DatSegIMX3.MARK):
-                item.load(self._data, self._path)
+                item.load(self.data, self.path)
+
+
 

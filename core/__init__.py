@@ -6,6 +6,7 @@
 
 from .fs import mbr, gpt, fat, ext
 from .image import LinuxImage
+from .smxfile import SmxFile
 
 __author__  = "Martin Olejar"
 __contact__ = "martin.olejar@gmail.com"

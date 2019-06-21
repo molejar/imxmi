@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2019 Martin Olejar
+# Copyright (c) 2019 Martin Olejar
 #
 # SPDX-License-Identifier: BSD-3-Clause
 # The BSD-3-Clause license for this file can be found in the LICENSE file included with this distribution
@@ -6,6 +6,7 @@
 
 from imx.img import SegDCD
 from .base import DatSegBase, get_full_path
+from voluptuous import Optional, Required, All, Any
 
 
 class InitErrorDCD(Exception):
@@ -17,59 +18,17 @@ class DatSegDCD(DatSegBase):
     """ Data segments class for Device Configuration Data
 
         <NAME>.dcd:
-            DESC: srt
-            ADDR: int
-            DATA: str or bytes (required)
-
-        <NAME>.dcd:
-            DESC: srt
-            ADDR: int
-            FILE: path (required)
+            description: srt
+            address: int
+            <data or file>: str (required)
     """
 
     MARK = 'dcd'
-
-    def __init__(self, name, smx_data=None):
-        super().__init__(name)
-        self._txt_data = None
-        if smx_data is not None:
-            self.init(smx_data)
-
-    def init(self, smx_data):
-        """ Initialize DCD segments
-        :param smx_data: ...
-        """
-        assert isinstance(smx_data, dict)
-
-        for key, val in smx_data.items():
-            if not isinstance(key, str):
-                raise InitErrorDCD("{}: Property name must be a string !".format(self.full_name))
-            key = key.upper()
-            if key == 'DESC':
-                if not isinstance(val, str):
-                    raise InitErrorDCD("{}/DESC: Value must be a string !".format(self.full_name))
-                self.description = val
-            elif key == 'ADDR':
-                if not isinstance(val, int):
-                    try:
-                        self.address = int(val, 0)
-                    except Exception as ex:
-                        raise InitErrorDCD("{}/ADDR: {}".format(self.full_name, str(ex)))
-                else:
-                    self.address = val
-            elif key == 'DATA':
-                if not isinstance(val, str):
-                    raise InitErrorDCD("{}/DATA: Not supported value type !".format(self.full_name))
-                self._txt_data = val
-            elif key == 'FILE':
-                if not isinstance(val, str):
-                    raise InitErrorDCD("{}/FILE: Value must be a string !".format(self.full_name))
-                self.path = val
-            else:
-                raise InitErrorDCD("{}: Not supported property name \"{}\" !".format(self.full_name, key))
-
-        if self.path is None and self._txt_data is None:
-            raise InitErrorDCD("{}: FILE or DATA property must be defined !".format(self.full_name))
+    SCHEMA = {
+        Optional('description'): str,
+        Optional('address'): Any(int, All(str, lambda v: int(v, 0))),
+        Required(Any('data', 'file')): str
+    }
 
     def load(self, db, root_path):
         """ load DCD segments
@@ -79,10 +38,10 @@ class DatSegDCD(DatSegBase):
         assert isinstance(db, list)
         assert isinstance(root_path, str)
 
-        if self.path is None:
-            dcd_obj = SegDCD.parse_txt(self._txt_data)
+        if 'data' not in self.smx_data:
+            dcd_obj = SegDCD.parse_txt(self.smx_data['data'])
         else:
-            file_path = get_full_path(root_path, self.path)[0]
+            file_path = get_full_path(root_path, self.smx_data['file'])[0]
             if file_path.endswith(".txt"):
                 with open(file_path, 'r') as f:
                     dcd_obj = SegDCD.parse_txt(f.read())

@@ -5,6 +5,7 @@
 # or at https://spdx.org/licenses/BSD-3-Clause.html#licenseText
 
 import os
+from voluptuous import Schema, ALLOW_EXTRA
 
 
 def get_full_path(root, *path_list):
@@ -48,16 +49,17 @@ class DatSegBase(object):
     """ Data segments base class """
 
     MARK = 'base'
+    SCHEMA = {}
 
     @property
     def loaded(self):
-        return False if self.data is None else True
+        return False if self.smx_data is None else True
 
     @property
     def full_name(self):
         return '{}.{}'.format(self.name, self.MARK)
 
-    def __init__(self, name):
+    def __init__(self, name, smx_data=None):
         """ Init BaseItem
         :param name: Data segments name
         :return Data segments object
@@ -66,9 +68,9 @@ class DatSegBase(object):
 
         self.name = name
         self.data = None
-        self.path = None
-        self.address = None
-        self.description = ""
+        self.smx_data = None
+        if smx_data is not None:
+            self.init(smx_data)
 
     def __str__(self):
         """ String representation """
@@ -78,11 +80,17 @@ class DatSegBase(object):
         """ Check data segments inequality """
         return not self.__eq__(node)
 
+    def init(self, smx_data):
+        """ Initialize IMX segments
+        :param smx_data: ...
+        """
+        assert isinstance(smx_data, dict)
+
+        s = Schema(self.SCHEMA, extra=ALLOW_EXTRA)
+        self.smx_data = s(smx_data)
+
     def info(self):
         return self.full_name
-
-    def init(self, data):
-        raise NotImplementedError()
 
     def load(self, db, root_path):
         raise NotImplementedError()

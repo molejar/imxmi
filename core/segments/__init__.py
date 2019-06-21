@@ -6,6 +6,7 @@
 
 from .fdt import DatSegFDT, InitErrorFDT
 from .dcd import DatSegDCD, InitErrorDCD
+from .csf import DatSegCSF
 from .imx import DatSegIMX2, DatSegIMX2B, DatSegIMX3, InitErrorIMX
 from .raw import DatSegRAW, InitErrorRAW
 from .uboot import DatSegUBI, DatSegUBX, DatSegUBT, DatSegUEV, InitErrorUBI, InitErrorUBX, InitErrorUBT, InitErrorUEV
