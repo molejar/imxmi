@@ -9,7 +9,7 @@ from .base import DatSegBase, get_full_path
 from voluptuous import Optional, Required, All, Any
 
 
-class InitErrorRAW(Exception):
+class ErrorRAW(Exception):
     """Thrown when parsing a file fails"""
     pass
 

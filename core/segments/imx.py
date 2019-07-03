@@ -20,7 +20,7 @@ img_types = {
 }
 
 
-class InitErrorIMX(Exception):
+class ErrorIMX(Exception):
     """Thrown when parsing a file fails"""
     pass
 
@@ -30,6 +30,7 @@ class DatSegIMX2(DatSegBase):
 
         <NAME>.imx2:
             description: str
+            csf: str
             file: str (required)
             mode: <'disabled', 'merge' or 'replace'> (default: 'disabled')
             mark: str (default: 'bootcmd=')
@@ -41,12 +42,14 @@ class DatSegIMX2(DatSegBase):
             offset: int (default: 0x400)
             plugin: <'yes' or 'no'> (default: 'no')
             version: int (default: 0x41)
-            dcdseg: <NAME>.dcd
-            appseg: <NAME>.ubin (required)
+            dcd_seg: <NAME>.dcd
+            app_seg: <NAME>.ubin (required)
+            csf_seg: <NAME>.csf
     """
 
     SCHEMA1 = {
         Optional('description'): str,
+        Optional('csf'): str,
         Required('file'): str,
         Optional('mode', default='disabled'): All(str, Any('disabled', 'merge', 'replace')),
         Optional('mark', default='bootcmd='): str,
@@ -59,8 +62,9 @@ class DatSegIMX2(DatSegBase):
         Optional('offset', default=0x400): Any(int, All(str, lambda v: int(v, 0))),
         Optional('plugin', default='no'): All(str, Any('yes', 'no')),
         Optional('version', default=0x41): Any(int, All(str, lambda v: int(v, 0))),
-        Optional('dcdseg'): str,
-        Required('appseg'): str
+        Optional('dcd_seg'): str,
+        Required('app_seg'): str,
+        Optional('csf_seg'): str
     }
 
     MARK = 'imx2'

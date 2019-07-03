@@ -123,12 +123,11 @@ data_segments:
         install_key:
             verification_index: 0
             target_index: 0
-            FILE: ""
+            file: ""
 
         authenticate_data:
             verification_index: 0
             blocks:
-
                 - address: "0x5000"
                   offset: 0x400
                   size: "1024"
@@ -148,15 +147,15 @@ data_segments:
             verification_index: 0
             mac_bytes: 5
             blocks:
-                - Address: "0x5000"
-                  OFFSET: 0x400
+                - address: "0x5000"
+                  offset: 0x400
                   size: 1024
 
     uboot_img0.imx2:
         description: U-Boot Image
         file: imx7d_sdb/u-boot.imx
         # ...
-        seco: hab_config.csf
+        csf: hab_config.csf
         # Environment variables insert mode (disabled, merge or replace)
         mode: merge
         # Environment variables start mark in u-boot image
@@ -170,7 +169,7 @@ data_segments:
         description: U-Boot image for running network boot script
         file: imx7d_sdb/u-boot.imx
         # ...
-        SECO: hab_config.csf
+        csf: hab_config.csf
         # Environment variables insert mode (disabled, merge or replace)
         mode: merge
         # Environment variables start mark in u-boot image
@@ -179,6 +178,14 @@ data_segments:
         eval: |
             bootdelay = 0
             bootcmd = echo Running network boot script ...; source {{ SCRIM_ADDR }}
+
+    uboot_img2.imx2:
+        description: U-Boot Image
+        address: 0x70000
+        version: 0x41
+        dcd_seg: ddr3.dcd
+        app_seg: uboot.ubin
+        csf_seg: hab_config.csf
 
     kernel_image.raw:
         description: Kernel Image
@@ -312,10 +319,10 @@ data_segments:
             # ----------------------------------
             run netboot
 
-    uboot_variables.uev:
+    uboot_variables.uevs:
         description: U-Boot ENV
-        uboot_image: imx7d_sdb/u-boot.imx
-        data:
+        file: imx7d_sdb/u-boot.imx
+        eval: |
 
 
 # *************************************************************

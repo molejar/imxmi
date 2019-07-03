@@ -239,13 +239,13 @@ class MBR(object):
 
     def __getitem__(self, key):
         if key >= self.MAX_PARTITIONS:
-            raise IndexError()
+            raise IndexError("index out of range: {} > max({})".format(key, self.MAX_PARTITIONS - 1))
         return self._partitions.get(key)
 
     def __setitem__(self, key, value):
         assert isinstance(value, PartitionEntry)
         if key >= self.MAX_PARTITIONS:
-            raise IndexError()
+            raise IndexError("index out of range: {} > max({})".format(key, self.MAX_PARTITIONS - 1))
         self._partitions[key] = value
 
     def __iter__(self):

@@ -16,22 +16,22 @@ supported_oss = [item[0] for item in uboot.EnumOsType]
 supported_compressions = [item[0] for item in uboot.EnumCompressionType]
 
 
-class InitErrorUBI(Exception):
+class ErrorUBI(Exception):
     """ Thrown when parsing a file fails """
     pass
 
 
-class InitErrorUBX(Exception):
+class ErrorUBX(Exception):
     """ Thrown when parsing a file fails """
     pass
 
 
-class InitErrorUBT(Exception):
+class ErrorUBT(Exception):
     """ Thrown when parsing a file fails """
     pass
 
 
-class InitErrorUEV(Exception):
+class ErrorUEV(Exception):
     """ Thrown when parsing a file fails """
     pass
 
@@ -101,7 +101,7 @@ class DatSegUBX(DatSegBase):
     SCHEMA = {
         Optional('description'): str,
         Optional('address'): Any(int, All(str, lambda v: int(v, 0))),
-        Required(Any('data', 'file')): Any(str, list),
+        Required(Any('data', 'file'), msg="required key 'data' or 'file' not provided"): Any(str, list),
         Optional('header'): {
             Optional('name', default=''): All(str, Length(min=0, max=32)),
             Optional('entry_address', default=0): Any(int, All(str, lambda v: int(v, 0))),
@@ -176,7 +176,7 @@ class DatSegUBT(DatSegBase):
     SCHEMA = {
         Optional('description'): str,
         Optional('address'): Any(int, All(str, lambda v: int(v, 0))),
-        Required(Any('data', 'file')): str
+        Required(Any('data', 'file'), msg="required key 'data' or 'file' not provided"): str,
     }
 
     def load(self, db, root_path):
@@ -218,7 +218,7 @@ class DatSegUEV(DatSegBase):
         Optional('address'): Any(int, All(str, lambda v: int(v, 0))),
         Optional('file'): str,
         Optional('mark', default='bootcmd='): str,
-        Optional('eval'): str
+        Required('eval'): str
     }
 
     def load(self, db, root_path):

@@ -10,7 +10,7 @@ from .base import DatSegBase, get_full_path
 from voluptuous import Optional, Required, All, Any
 
 
-class InitErrorFDT(Exception):
+class ErrorFDT(Exception):
     """Thrown when parsing a file fails"""
     pass
 

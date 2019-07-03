@@ -4,16 +4,17 @@
 # The BSD-3-Clause license for this file can be found in the LICENSE file included with this distribution
 # or at https://spdx.org/licenses/BSD-3-Clause.html#licenseText
 
-from .fdt import DatSegFDT, InitErrorFDT
-from .dcd import DatSegDCD, InitErrorDCD
-from .csf import DatSegCSF
-from .imx import DatSegIMX2, DatSegIMX2B, DatSegIMX3, InitErrorIMX
-from .raw import DatSegRAW, InitErrorRAW
-from .uboot import DatSegUBI, DatSegUBX, DatSegUBT, DatSegUEV, InitErrorUBI, InitErrorUBX, InitErrorUBT, InitErrorUEV
+from .fdt import DatSegFDT, ErrorFDT
+from .dcd import DatSegDCD, ErrorDCD
+from .csf import DatSegCSF, ErrorCSF
+from .raw import DatSegRAW, ErrorRAW
+from .imx import DatSegIMX2, DatSegIMX2B, DatSegIMX3, ErrorIMX
+from .uboot import DatSegUBI, DatSegUBX, DatSegUBT, DatSegUEV, ErrorUBI, ErrorUBX, ErrorUBT, ErrorUEV
 
 __all__ = [
     'DatSegFDT',
     'DatSegDCD',
+    'DatSegCSF',
     'DatSegIMX2',
     'DatSegIMX2B',
     'DatSegIMX3',
@@ -23,11 +24,13 @@ __all__ = [
     'DatSegUBT',
     'DatSegUEV',
     # Errors
-    'InitErrorFDT',
-    'InitErrorDCD',
-    'InitErrorIMX',
-    'InitErrorRAW',
-    'InitErrorUBI',
-    'InitErrorUBX',
-    'InitErrorUBT'
+    'ErrorFDT',
+    'ErrorDCD',
+    'ErrorCSF',
+    'ErrorIMX',
+    'ErrorRAW',
+    'ErrorUBI',
+    'ErrorUBX',
+    'ErrorUBT',
+    'ErrorUEV'
 ]

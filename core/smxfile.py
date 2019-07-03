@@ -6,18 +6,21 @@
 
 
 import os
-import imx
+import sys
 import yaml
 import jinja2
-
-from voluptuous import Optional, Required, Range, All, Any, Schema, ALLOW_EXTRA
+from voluptuous import Optional, Required, Range, All, Any, Schema, ALLOW_EXTRA, Invalid
 
 # internals
 from .segments import DatSegFDT, DatSegDCD, DatSegIMX2, DatSegIMX2B, DatSegIMX3, DatSegRAW, DatSegUBI, \
                       DatSegUBX, DatSegUBT, DatSegUEV, DatSegCSF
 from .fs import mbr, gpt, fat, ext
+from .image import LinuxImage, AndroidImage
 
 
+########################################################################################################################
+# helper functions
+########################################################################################################################
 def fmt_size(num, kibibyte=True):
     base, suffix = [(1000., 'B'), (1024., 'iB')][kibibyte]
     for x in ['B'] + [x + suffix for x in list('kMGTP')]:
@@ -40,15 +43,47 @@ class SafeCustomLoader(yaml.SafeLoader):
             mapping[key.lower()] = value
 
         # Add line number in YAML file for parsed KEY
-        mapping['__line__'] = node.start_mark.line + 1
+        mapping['__line__'] = node.start_mark.line
         return mapping
 
 
-class ParseError(Exception):
-    """Thrown when parsing a file fails"""
-    pass
+########################################################################################################################
+# SMX Exceptions
+########################################################################################################################
+class SMXError(Exception):
+    """ Thrown when parsing a file fails """
+
+    @property
+    def line_number(self):
+        return self._line
+
+    @property
+    def path_to_error(self):
+        return self._path
+
+    @property
+    def error_description(self):
+        return self._desc
+
+    def __init__(self, msg, line=None, path=None):
+        """ Initialize the Exception with given message. """
+        self._line = line
+        self._path = path
+        self._desc = msg
+
+    def __str__(self):
+        """ Return the Exception message. """
+        msg = ""
+        if self._line:
+            msg += '<L:{}> '.format(self._line)
+        if self._path:
+            msg += '{} => '.format(self._path)
+        return msg + self._desc
 
 
+########################################################################################################################
+# SMX Classes
+########################################################################################################################
 class SmxLinuxImage(object):
     """ Boot Image class
 
@@ -80,11 +115,11 @@ class SmxLinuxImage(object):
     SCHEMA = {
         Required('bootloader'): {
             Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
-            Required(Any('image', 'file')): str
+            Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
         },
         Optional('uboot_env'): {
             Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
-            Required(Any('image', 'file')): str
+            Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
         },
         Optional('partitions'): All(list, [{
             Optional('name'): str,
@@ -93,7 +128,7 @@ class SmxLinuxImage(object):
             Optional('size'): Any(int, All(str, lambda v: int(v, 0))),
             Optional('file'): str,
             Optional('data'): All(list, [{
-                Required(Any('image', 'file')): str,
+                Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
                 Optional('name'): str
             }])
         }])
@@ -140,26 +175,26 @@ class SmxAndroidImage(object):
                   file: str (required)
     """
 
-    supported_parts = [item[0] for item in mbr.PartitionType]
+    PARTS = [item[0] for item in mbr.PartitionType]
 
     SCHEMA = {
         Required('mbr_type'): str,
         Required('bootloader'): {
             Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
-            Required(Any('image', 'file')): str
+            Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
         },
         Optional('uboot_env'): {
             Required('offset'): Any(int, All(str, lambda v: int(v, 0))),
-            Required(Any('image', 'file')): str
+            Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
         },
         Optional('partitions'): All(list, [{
             Optional('name'): str,
-            Optional('type'): All(str, Any(*supported_parts)),
+            Optional('type'): All(str, Any(*PARTS)),
             Optional('offset'): Any(int, All(str, lambda v: int(v, 0))),
             Optional('size'): Any(int, All(str, lambda v: int(v, 0))),
             Optional('file'): str,
             Optional('data'): All(list, [{
-                Required(Any('image', 'file')): str,
+                Required(Any('image', 'file'), msg="required key 'image' or 'file' not provided"): str,
                 Optional('name'): str
             }])
         }])
@@ -181,18 +216,18 @@ class SmxAndroidImage(object):
 
 class SmxFile(object):
 
-    data_segments = {
+    DS = {
         DatSegDCD.MARK: DatSegDCD,
         DatSegCSF.MARK: DatSegCSF,
         DatSegFDT.MARK: DatSegFDT,
-        DatSegIMX2.MARK: DatSegIMX2,
-        DatSegIMX2B.MARK: DatSegIMX2B,
-        DatSegIMX3.MARK: DatSegIMX3,
         DatSegUBI.MARK: DatSegUBI,
         DatSegUBX.MARK: DatSegUBX,
         DatSegUBT.MARK: DatSegUBT,
         DatSegUEV.MARK: DatSegUEV,
-        DatSegRAW.MARK: DatSegRAW
+        DatSegRAW.MARK: DatSegRAW,
+        DatSegIMX2.MARK: DatSegIMX2,
+        DatSegIMX3.MARK: DatSegIMX3,
+        DatSegIMX2B.MARK: DatSegIMX2B
     }
 
     def __init__(self, file=None, auto_load=False):
@@ -218,11 +253,11 @@ class SmxFile(object):
         """
         assert isinstance(file, str)
 
-        # open core file
+        # open smx file
         with open(file, 'r') as f:
             txt_data = f.read()
 
-        # load core file
+        # load smx file
         smx_data = yaml.load(txt_data, Loader=yaml.SafeLoader)
         if 'variables' in smx_data:
             var_data = smx_data['variables']
@@ -259,28 +294,59 @@ class SmxFile(object):
                 for full_name, data in value.items():
                     if full_name.startswith('_') or full_name.endswith('_'):
                         continue
+                    # set error params
+                    error_line = data.get('__line__')
+                    error_path = full_name
                     try:
                         item_name, item_type = full_name.split('.')
                     except ValueError:
-                        raise Exception("Not supported data segment format: {}".format(full_name))
+                        raise SMXError("not supported data-segment format: {}".format(full_name),
+                                       error_line, error_path)
                     # case tolerant type
                     item_type = item_type.lower()
-                    if item_type not in self.data_segments.keys():
-                        raise Exception("Not supported data segments type: {}".format(item_type))
-                    self.data.append(self.data_segments[item_type](item_name, data))
+                    if item_type not in self.DS.keys():
+                        raise SMXError("not supported data-segment type: {}".format(item_type), error_line, error_path)
+                    try:
+                        data_segment = self.DS[item_type](item_name, data)
+                    except Invalid as e:
+                        for name in e.path:
+                            if isinstance(name, (str, int)):
+                                error_path += "/{}".format(name)
+                            elif isinstance(name, Required) and isinstance(name.schema, str):
+                                error_path += "/{}".format(name.schema)
+                        raise SMXError(e.error_message, error_line, error_path)
+                    self.data.append(data_segment)
 
             elif key == 'linux_sd_image':
-                self.image = SmxLinuxImage(value)
+                try:
+                    self.image = SmxLinuxImage(value)
+                except Invalid as e:
+                    error_path = key
+                    for name in e.path:
+                        if isinstance(name, (str, int)):
+                            error_path += "/{}".format(name)
+                        elif isinstance(name, Required) and isinstance(name.schema, str):
+                            error_path += "/{}".format(name.schema)
+                    raise SMXError(e.error_message, value.get('__line__'), error_path)
 
             elif key == 'android_sd_image':
-                self.image = SmxAndroidImage(value)
+                try:
+                    self.image = SmxAndroidImage(value)
+                except Invalid as e:
+                    error_path = key
+                    for name in e.path:
+                        if isinstance(name, (str, int)):
+                            error_path += "/{}".format(name)
+                        elif isinstance(name, Required) and isinstance(name.schema, str):
+                            error_path += "/{}".format(name.schema)
+                    raise SMXError(e.error_message, value.get('__line__'), error_path)
 
         if self.platform is None:
-            raise Exception("Platform not specified inside: %s" % file)
+            raise SMXError("Required key 'platform' not provided in {}".format(file))
         if self.image is None:
-            raise Exception("Key 'boot_image' doesn't exist inside: %s" % file)
+            raise SMXError("Required key 'boot_image' not provided in {}".format(file))
         if not self.data:
-            raise Exception("Key 'data_segments' doesn't exist inside: %s" % file)
+            raise SMXError("Required key 'data_segments' not provided in {}".format(file))
 
         if auto_load:
             self.load()

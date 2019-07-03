@@ -9,7 +9,7 @@ from .base import DatSegBase, get_full_path
 from voluptuous import Optional, Required, All, Any
 
 
-class InitErrorDCD(Exception):
+class ErrorDCD(Exception):
     """Thrown when parsing a file fails"""
     pass
 
@@ -27,7 +27,7 @@ class DatSegDCD(DatSegBase):
     SCHEMA = {
         Optional('description'): str,
         Optional('address'): Any(int, All(str, lambda v: int(v, 0))),
-        Required(Any('data', 'file')): str
+        Required(Any('data', 'file'), msg="required key 'data' or 'file' not provided"): str,
     }
 
     def load(self, db, root_path):
